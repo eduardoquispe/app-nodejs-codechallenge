@@ -1,0 +1,98 @@
+services:
+  postgres-command:
+    image: postgres:14
+    ports:
+      - "${PORT_DB_COMMAND}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB_COMMAND}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_command_data:/var/lib/postgresql/data
+
+  postgres-query:
+    image: postgres:14
+    ports:
+      - "${PORT_DB_QUERY}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB_QUERY}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_query_data:/var/lib/postgresql/data
+
+  api-gateway:
+    build:
+      context: ./api_gateway-main
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "${PORT_GATEWAY}:3000"
+    volumes:
+      - ./api_gateway-main/src:/usr/src/app/src
+      - /usr/src/app/node_modules
+    environment:
+      CLIENT_GATEWAY_PORT: ${CLIENT_GATEWAY_PORT}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+    depends_on:
+      - kafka
+      - ms-transaction-qr
+      - ms-transaction-cm
+      - ms-anti-fraud
+
+  ms-transaction-qr:
+    build:
+      context: ./ms_bk-ux-transaction-qr
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "${PORT_QR}:3001"
+    volumes:
+      - ./ms_bk-ux-transaction-qr/src:/usr/src/app/src
+      - /usr/src/app/node_modules
+    # command: npm run start:dev
+    environment:
+      PORT: ${PORT_QR}
+      DATABASE_URL: ${DATABASE_QR_URL}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+    depends_on:
+      - kafka
+      - postgres-query
+
+  ms-transaction-cm:
+    build:
+      context: ./ms_bk-ux-transaction-cm
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "${PORT_CM}:3002"
+    volumes:
+      - ./ms_bk-ux-transaction-cm/src:/usr/src/app/src
+      - /usr/src/app/node_modules
+    command: npm run start:dev
+    environment:
+      PORT: ${PORT_CM}
+      DATABASE_URL: ${DATABASE_CM_URL}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+    depends_on:
+      - kafka
+      - postgres-command
+
+  ms-anti-fraud:
+    build:
+      context: ./ms_bk-ng-anti_fraud
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "${PORT_AF}:3003"
+    volumes:
+      - ./ms_bk-ng-anti_fraud/src:/usr/src/app/src
+      - /usr/src/app/node_modules
+    command: npm run start:dev
+    environment:
+      PORT: ${PORT_AF}
+      KAFKA_BROKER: ${KAFKA_BROKER}
+    depends_on:
+      - kafka
+      - ms-transaction-cm
+      - ms-transaction-qr
